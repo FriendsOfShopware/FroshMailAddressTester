@@ -23,8 +23,9 @@ class Tester
     public function validateEmail(string $email): bool
     {
         $email = \strtolower($email);
+        $level = $this->systemConfigService->getString('FroshMailAddressTester.config.level');
 
-        $mailValidCache = $this->getCacheItem($email);
+        $mailValidCache = $this->getCacheItem($email, $level);
         $mailValidCacheResult = $mailValidCache->get();
         if (\is_bool($mailValidCacheResult)) {
             return $mailValidCacheResult;
@@ -37,7 +38,7 @@ class Tester
 
         $domain = $syntaxResult->domain;
 
-        $domainValidCache = $this->getCacheItem($domain);
+        $domainValidCache = $this->getCacheItem($domain, $level);
         // first check if the domain is already marked as invalid
         if ($domainValidCache->get() === false) {
             return false;
@@ -46,6 +47,7 @@ class Tester
         $mxRecords = (new DNS())->getMxRecords($domain);
 
         if (empty($mxRecords)) {
+            $this->saveCache($mailValidCache, false);
             $this->saveCache($domainValidCache, false);
 
             $this->froshMailTesterLogger->error(\sprintf('Domain %s has no mx records', $domain));
@@ -53,7 +55,9 @@ class Tester
             return false;
         }
 
-        if ($this->systemConfigService->getString('FroshMailAddressTester.config.level') !== 'smtp') {
+        if ($level !== 'smtp') {
+            $this->saveCache($mailValidCache, true);
+
             return true;
         }
 
@@ -87,9 +91,9 @@ class Tester
         return $isValid;
     }
 
-    private function getCacheItem(string $value): CacheItemInterface
+    private function getCacheItem(string $value, string $level): CacheItemInterface
     {
-        $cacheKey = 'frosh_mail_tester_' . Hasher::hash($value);
+        $cacheKey = 'frosh_mail_tester_' . $level . '_' . Hasher::hash($value);
 
         return $this->cache->getItem($cacheKey);
     }
